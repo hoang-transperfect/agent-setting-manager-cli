@@ -2,6 +2,14 @@
   "name": "agent-setting-manager",
   "version": "1.0.0",
   "description": "CLI to manage AI agent configuration files across Claude and Cursor platforms",
+  "repository": {
+    "type": "git",
+    "url": "git+ssh://git@github.com/hoang-transperfect/agent-setting-manager-cli.git"
+  },
+  "homepage": "https://github.com/hoang-transperfect/agent-setting-manager-cli#readme",
+  "bugs": {
+    "url": "https://github.com/hoang-transperfect/agent-setting-manager-cli/issues"
+  },
   "type": "module",
   "bin": {
     "asm": "src/cli.js"
