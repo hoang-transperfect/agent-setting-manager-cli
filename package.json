@@ -4,8 +4,13 @@
   "description": "CLI to manage AI agent configuration files across Claude and Cursor platforms",
   "type": "module",
   "bin": {
-    "asm": "./src/cli.js"
+    "asm": "src/cli.js"
   },
+  "files": [
+    "src/",
+    "LICENSE",
+    "README.md"
+  ],
   "engines": {
     "node": ">=18"
   },
