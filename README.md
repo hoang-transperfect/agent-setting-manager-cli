@@ -24,6 +24,24 @@ Or run directly with npx:
 npx agent-setting-manager init
 ```
 
+### Install via AI Agent
+
+You can ask your AI agent (Claude Code, Cursor, etc.) to install and set up `asm` in your project by sending this prompt:
+
+```
+Install and set up the `asm` (agent-setting-manager) CLI tool in this project.
+
+Steps:
+1. Check if Node.js 18+ is available.
+   - If not found, try to install it using a version manager appropriate for the current OS (e.g. nvm, fnm, or a system package manager).
+   - If you cannot install it automatically, stop and give me clear instructions to install Node.js 18+ manually for my OS before continuing.
+2. Install the CLI globally: `npm install -g agent-setting-manager`
+3. Run `asm init` in the project root to create `agent.json` and `agent-log.json`.
+4. Verify the setup by running `asm --help`.
+
+Once done, show me the contents of the generated `agent.json` so I can review it.
+```
+
 ## Quick Start
 
 ```bash
