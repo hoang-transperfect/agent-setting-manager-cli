@@ -2,7 +2,9 @@ import { readFileSync, existsSync } from 'node:fs';
 
 export async function fetchSource(source) {
   if (source.startsWith('http://') || source.startsWith('https://')) {
-    const res = await fetch(source);
+    const res = await fetch(source, {
+      headers: { 'Cache-Control': 'no-cache', 'Pragma': 'no-cache' },
+    });
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}: ${source}`);
     }
