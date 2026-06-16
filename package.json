@@ -1,0 +1,22 @@
+{
+  "name": "agent-setting-manager",
+  "version": "1.0.0",
+  "description": "CLI to manage AI agent configuration files across Claude and Cursor platforms",
+  "type": "module",
+  "bin": {
+    "asm": "./src/cli.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "commander": "^12.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^1.6.0"
+  }
+}
