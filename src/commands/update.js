@@ -6,6 +6,10 @@ import { fetchSource } from '../core/fetch-source.js';
 import { getAdapter } from '../adapters/index.js';
 import { ExitCollector } from '../core/exit.js';
 
+function getActiveTargets(log) {
+  return [...new Set(log.items.map((i) => i.target))];
+}
+
 function conventionPath(type, name, target, cwd) {
   if (type === 'skill') return join(cwd, `.${target}`, 'skills', name, 'SKILL.md');
   if (type === 'rule') return join(cwd, `.${target}`, 'rules', `${name}.md`);
@@ -19,20 +23,41 @@ export async function runUpdate({ cwd, type, names }) {
 
   const manifest = readManifest(manifestPath);
 
-  // US-006/US-011: treat missing agent-log.json as empty
-  let log;
+  // Handle missing agent-log.json
   if (!existsSync(logPath)) {
-    log = { version: '1.0.0', items: [] };
-    writeLog(logPath, log);
+    writeLog(logPath, { version: '1.0.0', items: [] });
     return {
       exitCode: 0,
       stdout: 'no active targets — run asm install --target <target> to set up platforms',
     };
-  } else {
-    log = readLog(logPath);
   }
 
+  const log = readLog(logPath);
+  const activeTargets = getActiveTargets(log);
+
   const collector = new ExitCollector();
+
+  // Validate named artifacts against manifest before checking targets
+  if (names && names.length > 0) {
+    const typesToCheck = type ? [type] : ['skill', 'rule', 'agentFile'];
+    for (const artifactType of typesToCheck) {
+      const entries = getManifestEntries(manifest, artifactType);
+      for (const name of names) {
+        const found = entries.some((e) => (e.name ?? 'agentFile') === name);
+        if (!found) collector.addFailure(`${name} not found in agent.json`);
+      }
+    }
+    if (collector.hasFailures()) {
+      return { exitCode: 1, stderr: collector.getFailures().join('\n') };
+    }
+  }
+
+  if (activeTargets.length === 0) {
+    return {
+      exitCode: 0,
+      stdout: 'no active targets — run asm install --target <target> to set up platforms',
+    };
+  }
   const typesToUpdate = type ? [type] : ['skill', 'rule', 'agentFile'];
 
   let updated = 0;
@@ -47,13 +72,6 @@ export async function runUpdate({ cwd, type, names }) {
       ? entries.filter((e) => names.includes(e.name ?? 'agentFile'))
       : entries;
 
-    if (names) {
-      for (const name of names) {
-        const found = entries.some((e) => (e.name ?? 'agentFile') === name);
-        if (!found) collector.addFailure(`${name} not found in agent.json`);
-      }
-    }
-
     for (const entry of selectedEntries) {
       const entryName = entry.name ?? 'agentFile';
 
@@ -66,54 +84,33 @@ export async function runUpdate({ cwd, type, names }) {
         continue;
       }
 
-      const logEntries = log.items.filter(
-        (i) => i.type === artifactType && i.name === entryName
-      );
-
-      if (logEntries.length === 0) {
-        process.stderr.write(
-          `${entryName} not found in agent-log — attempting at expected path\n`
-        );
-        for (const target of ['claude', 'cursor']) {
-          const adapter = getAdapter(target);
-          if (adapter) {
-            try {
-              await installByType(adapter, artifactType, entry, cwd, content);
-            } catch {
-              // ignore
-            }
-          }
-        }
-        continue;
-      }
-
-      for (const logEntry of logEntries) {
-        const adapter = getAdapter(logEntry.target);
+      for (const target of activeTargets) {
+        const adapter = getAdapter(target);
         if (!adapter) continue;
 
         try {
-          // US-011: compare content before writing
-          const installedPath = logEntry.installedPath
-            ?? conventionPath(artifactType, entryName, logEntry.target, cwd);
+          const installedPath = conventionPath(artifactType, entryName, target, cwd);
           const currentContent = installedPath && existsSync(installedPath)
             ? readFileSync(installedPath, 'utf8')
             : null;
 
           if (currentContent === content) {
-            stdout.push(`no change: ${entryName} (${logEntry.target}) — already up to date`);
+            stdout.push(`no change: ${entryName} (${target}) — already up to date`);
             unchanged++;
           } else {
             await installByType(adapter, artifactType, entry, cwd, content);
             addLogEntry(logPath, {
-              ...logEntry,
+              type: artifactType,
+              name: entryName,
+              target,
               installedAt: new Date().toISOString(),
               ...(installedPath ? { installedPath } : {}),
             });
-            stdout.push(`updated: ${entryName} (${logEntry.target})`);
+            stdout.push(`updated: ${entryName} (${target})`);
             updated++;
           }
         } catch (err) {
-          collector.addFailure(`failed to update ${entryName} on ${logEntry.target}: ${err.message}`);
+          collector.addFailure(`failed to update ${entryName} on ${target}: ${err.message}`);
           skipped++;
         }
       }

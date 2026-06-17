@@ -280,39 +280,6 @@ describe('US-006/US-011: missing agent-log.json handled gracefully', () => {
   });
 });
 
-describe('US-015: graceful handling of missing log entry on update', () => {
-  let dir;
-
-  beforeEach(() => {
-    dir = makeTmp();
-  });
-
-  afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
-  });
-
-  it('warns and attempts at expected path when log entry missing, exits 0', async () => {
-    mkdirSync(join(dir, 'sources'), { recursive: true });
-    writeFileSync(join(dir, 'sources', 'skill.md'), '# New content');
-
-    // Skill is in manifest but NOT in log
-    writeManifest(dir, {
-      version: '1.0.0',
-      agentFile: {},
-      skills: [{ name: 'code-review', source: join(dir, 'sources', 'skill.md') }],
-      rules: [],
-      mcps: [],
-    });
-
-    writeLog(dir, { version: '1.0.0', items: [] });
-
-    // Pre-create the expected path
-    mkdirSync(join(dir, '.claude', 'skills', 'code-review'), { recursive: true });
-    writeFileSync(join(dir, '.claude', 'skills', 'code-review', 'SKILL.md'), '# Old');
-
-    const result = await runUpdate({ cwd: dir, type: 'skill', names: ['code-review'] });
-
-    expect(result.exitCode).toBe(0);
-    // Should have attempted to write to the expected path
-  });
-});
+// US-015 superseded 2026-06-17: per-artifact log lookup removed.
+// Active targets are now resolved from distinct target values across ALL log items.
+// No per-artifact "not found in agent-log" lookup or warning exists anymore.

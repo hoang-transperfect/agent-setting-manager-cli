@@ -35,7 +35,7 @@ describe('US-012: asm remove', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('removes skill files, agent.json entry, and log records', async () => {
+  it('removes skill files via convention path, agent.json entry, and log records', async () => {
     mkdirSync(join(dir, '.claude', 'skills', 'code-review'), { recursive: true });
     mkdirSync(join(dir, '.cursor', 'skills', 'code-review'), { recursive: true });
     writeFileSync(join(dir, '.claude', 'skills', 'code-review', 'SKILL.md'), '# Skill');
@@ -49,11 +49,12 @@ describe('US-012: asm remove', () => {
       mcps: [],
     });
 
+    // Log has items for both targets — active targets resolved from these
     writeLog(dir, {
       version: '1.0.0',
       items: [
-        { type: 'skill', name: 'code-review', target: 'claude', installedAt: 't1', installedPath: join(dir, '.claude', 'skills', 'code-review', 'SKILL.md') },
-        { type: 'skill', name: 'code-review', target: 'cursor', installedAt: 't1', installedPath: join(dir, '.cursor', 'skills', 'code-review', 'SKILL.md') },
+        { type: 'skill', name: 'code-review', target: 'claude', installedAt: 't1' },
+        { type: 'skill', name: 'code-review', target: 'cursor', installedAt: 't1' },
       ],
     });
 
@@ -90,8 +91,8 @@ describe('US-012: asm remove', () => {
     writeLog(dir, {
       version: '1.0.0',
       items: [
-        { type: 'skill', name: 'skill-a', target: 'claude', installedAt: 't1', installedPath: join(dir, '.claude', 'skills', 'skill-a', 'SKILL.md') },
-        { type: 'skill', name: 'skill-b', target: 'claude', installedAt: 't1', installedPath: join(dir, '.claude', 'skills', 'skill-b', 'SKILL.md') },
+        { type: 'skill', name: 'skill-a', target: 'claude', installedAt: 't1' },
+        { type: 'skill', name: 'skill-b', target: 'claude', installedAt: 't1' },
       ],
     });
 
@@ -103,7 +104,7 @@ describe('US-012: asm remove', () => {
     expect(readManifestFile(dir).skills).toHaveLength(0);
   });
 
-  it('warns when file missing on platform but still removes manifest + log entries; exits 0', async () => {
+  it('succeeds silently when file not at convention path; still removes manifest + log; exits 0', async () => {
     writeManifest(dir, {
       version: '1.0.0',
       agentFile: {},
@@ -115,11 +116,11 @@ describe('US-012: asm remove', () => {
     writeLog(dir, {
       version: '1.0.0',
       items: [
-        { type: 'skill', name: 'code-review', target: 'claude', installedAt: 't1', installedPath: join(dir, '.claude', 'skills', 'code-review', 'SKILL.md') },
+        { type: 'skill', name: 'code-review', target: 'claude', installedAt: 't1' },
       ],
     });
 
-    // File does NOT exist at the logged path — should warn but not fail
+    // File does NOT exist — should not fail
 
     const result = await runRemove({ cwd: dir, type: 'skill', names: ['code-review'] });
 
@@ -147,7 +148,7 @@ describe('US-012: asm remove', () => {
   });
 });
 
-describe('US-015: graceful handling of missing log entry on remove', () => {
+describe('US-012: missing agent-log.json on remove', () => {
   let dir;
 
   beforeEach(() => {
@@ -158,7 +159,7 @@ describe('US-015: graceful handling of missing log entry on remove', () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
-  it('still removes from manifest when log entry is missing; exits 0', async () => {
+  it('creates agent-log.json, removes from agent.json only, prints no-active-targets message, exits 0', async () => {
     writeManifest(dir, {
       version: '1.0.0',
       agentFile: {},
@@ -166,12 +167,13 @@ describe('US-015: graceful handling of missing log entry on remove', () => {
       rules: [],
       mcps: [],
     });
-
-    writeLog(dir, { version: '1.0.0', items: [] }); // NOT in log
+    // No agent-log.json
 
     const result = await runRemove({ cwd: dir, type: 'skill', names: ['code-review'] });
 
     expect(result.exitCode).toBe(0);
+    expect(existsSync(join(dir, 'agent-log.json'))).toBe(true);
     expect(readManifestFile(dir).skills).toHaveLength(0);
+    expect(result.stdout).toContain('no active targets');
   });
 });

@@ -4,49 +4,66 @@ import { readManifest, writeManifest } from '../core/manifest.js';
 import { readLog, writeLog } from '../core/log.js';
 import { ExitCollector } from '../core/exit.js';
 
+function getActiveTargets(log) {
+  return [...new Set(log.items.map((i) => i.target))];
+}
+
+function conventionPath(type, name, target, cwd) {
+  const prefix = target === 'cursor' ? '.cursor' : '.claude';
+  if (type === 'skill') return join(cwd, prefix, 'skills', name, 'SKILL.md');
+  if (type === 'rule') return join(cwd, prefix, 'rules', `${name}.md`);
+  if (type === 'agentFile') return join(cwd, 'AGENTS.md');
+  return null;
+}
+
 export async function runRemove({ cwd, type, names }) {
   const manifestPath = join(cwd, 'agent.json');
   const logPath = join(cwd, 'agent-log.json');
 
   const manifest = readManifest(manifestPath);
-  const log = readLog(logPath);
   const collector = new ExitCollector();
 
+  // Handle missing agent-log.json
+  if (!existsSync(logPath)) {
+    const log = { version: '1.0.0', items: [] };
+    for (const name of names) {
+      if (!isInManifest(manifest, type, name)) {
+        collector.addFailure(`${name} not found in agent.json`);
+        continue;
+      }
+      removeFromManifest(manifest, type, name);
+    }
+    writeManifest(manifestPath, manifest);
+    writeLog(logPath, log);
+    if (collector.hasFailures()) {
+      return { exitCode: 1, stderr: collector.getFailures().join('\n') };
+    }
+    return { exitCode: 0, stdout: 'no active targets — run asm install --target <target> to set up platforms' };
+  }
+
+  const log = readLog(logPath);
+  const activeTargets = getActiveTargets(log);
+
   for (const name of names) {
-    // Check manifest
-    const inManifest = isInManifest(manifest, type, name);
-    if (!inManifest) {
+    if (!isInManifest(manifest, type, name)) {
       collector.addFailure(`${name} not found in agent.json`);
       continue;
     }
 
-    // Find log entries
-    const logEntries = log.items.filter((i) => i.type === type && i.name === name);
-
-    if (logEntries.length === 0) {
-      // US-015: not in log — warn, attempt at expected paths
-      process.stderr.write(`${name} not found in agent-log — attempting at expected path\n`);
-      for (const target of ['claude', 'cursor']) {
-        const path = conventionPath(type, name, target, cwd);
-        if (path && existsSync(path)) {
-          unlinkSync(path);
-        }
+    // Attempt removal at convention path for each active target
+    for (const target of activeTargets) {
+      const path = conventionPath(type, name, target, cwd);
+      if (path && existsSync(path)) {
+        unlinkSync(path);
       }
-    } else {
-      for (const entry of logEntries) {
-        if (entry.installedPath && existsSync(entry.installedPath)) {
-          unlinkSync(entry.installedPath);
-        } else if (entry.installedPath) {
-          process.stderr.write(
-            `file not found at ${entry.installedPath} — skipping platform removal\n`
-          );
-        }
+      // Also remove CLAUDE.md symlink when removing agentFile from claude target
+      if (type === 'agentFile' && target === 'claude') {
+        const claudeMd = join(cwd, 'CLAUDE.md');
+        if (existsSync(claudeMd)) unlinkSync(claudeMd);
       }
     }
 
-    // Remove from manifest
     removeFromManifest(manifest, type, name);
-    // Remove from log
     log.items = log.items.filter((i) => !(i.type === type && i.name === name));
   }
 
@@ -72,12 +89,4 @@ function removeFromManifest(manifest, type, name) {
   if (type === 'rule') manifest.rules = manifest.rules.filter((r) => r.name !== name);
   if (type === 'agentFile') manifest.agentFile = {};
   if (type === 'mcp') manifest.mcps = manifest.mcps.filter((m) => m.name !== name);
-}
-
-function conventionPath(type, name, target, cwd) {
-  const prefix = target === 'cursor' ? '.cursor' : '.claude';
-  if (type === 'skill') return join(cwd, prefix, 'skills', name, 'SKILL.md');
-  if (type === 'rule') return join(cwd, prefix, 'rules', `${name}.md`);
-  if (type === 'agentFile') return target === 'cursor' ? join(cwd, 'AGENTS.md') : join(cwd, 'AGENT.md');
-  return null;
 }
