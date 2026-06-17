@@ -19,10 +19,10 @@ export const claudeCodeAdapter = {
   },
 
   async installAgentFile(_item, targetDir, content) {
-    const agentMd = join(targetDir, 'AGENT.md');
+    const agentMd = join(targetDir, 'AGENTS.md');
     const claudeMd = join(targetDir, 'CLAUDE.md');
     writeFileAtomic(agentMd, content);
-    symlinkOrFallback('AGENT.md', claudeMd);
+    symlinkOrFallback('AGENTS.md', claudeMd);
     return agentMd;
   },
 
@@ -44,7 +44,7 @@ export const claudeCodeAdapter = {
   },
 
   async removeAgentFile(_item, targetDir) {
-    const agentMd = join(targetDir, 'AGENT.md');
+    const agentMd = join(targetDir, 'AGENTS.md');
     const claudeMd = join(targetDir, 'CLAUDE.md');
     if (existsSync(agentMd)) unlinkSync(agentMd);
     if (existsSync(claudeMd)) unlinkSync(claudeMd);

@@ -156,6 +156,130 @@ describe('US-011: asm update', () => {
   });
 });
 
+describe('US-011: result tracking (updated / no change / skipped)', () => {
+  let dir;
+
+  beforeEach(() => { dir = makeTmp(); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }); vi.restoreAllMocks(); });
+
+  it('reports "no change" and does not rewrite file or refresh installedAt when content identical', async () => {
+    const t1 = '2026-01-01T00:00:00.000Z';
+    const content = '# Same content';
+
+    mkdirSync(join(dir, 'sources'), { recursive: true });
+    writeFileSync(join(dir, 'sources', 'skill.md'), content);
+    mkdirSync(join(dir, '.claude', 'skills', 'code-review'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'skills', 'code-review', 'SKILL.md'), content);
+
+    writeManifest(dir, {
+      version: '1.0.0', agentFile: {},
+      skills: [{ name: 'code-review', source: join(dir, 'sources', 'skill.md') }],
+      rules: [], mcps: [],
+    });
+
+    writeLog(dir, {
+      version: '1.0.0',
+      items: [{
+        type: 'skill', name: 'code-review', target: 'claude', installedAt: t1,
+        installedPath: join(dir, '.claude', 'skills', 'code-review', 'SKILL.md'),
+      }],
+    });
+
+    const result = await runUpdate({ cwd: dir, type: 'skill', names: ['code-review'] });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('no change');
+    // installedAt must NOT be refreshed
+    const log = readLog(dir);
+    expect(log.items[0].installedAt).toBe(t1);
+  });
+
+  it('reports "updated" and refreshes installedAt when content changed', async () => {
+    const t1 = '2026-01-01T00:00:00.000Z';
+
+    mkdirSync(join(dir, 'sources'), { recursive: true });
+    writeFileSync(join(dir, 'sources', 'skill.md'), '# New content');
+    mkdirSync(join(dir, '.claude', 'skills', 'code-review'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'skills', 'code-review', 'SKILL.md'), '# Old content');
+
+    writeManifest(dir, {
+      version: '1.0.0', agentFile: {},
+      skills: [{ name: 'code-review', source: join(dir, 'sources', 'skill.md') }],
+      rules: [], mcps: [],
+    });
+
+    writeLog(dir, {
+      version: '1.0.0',
+      items: [{
+        type: 'skill', name: 'code-review', target: 'claude', installedAt: t1,
+        installedPath: join(dir, '.claude', 'skills', 'code-review', 'SKILL.md'),
+      }],
+    });
+
+    const result = await runUpdate({ cwd: dir, type: 'skill', names: ['code-review'] });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toContain('updated');
+    const log = readLog(dir);
+    expect(log.items[0].installedAt).not.toBe(t1);
+  });
+
+  it('prints final summary with counts', async () => {
+    const content = '# Same';
+    mkdirSync(join(dir, 'sources'), { recursive: true });
+    writeFileSync(join(dir, 'sources', 'same.md'), content);
+    writeFileSync(join(dir, 'sources', 'changed.md'), '# New');
+    mkdirSync(join(dir, '.claude', 'skills', 'same-skill'), { recursive: true });
+    mkdirSync(join(dir, '.claude', 'skills', 'changed-skill'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'skills', 'same-skill', 'SKILL.md'), content);
+    writeFileSync(join(dir, '.claude', 'skills', 'changed-skill', 'SKILL.md'), '# Old');
+
+    writeManifest(dir, {
+      version: '1.0.0', agentFile: {},
+      skills: [
+        { name: 'same-skill', source: join(dir, 'sources', 'same.md') },
+        { name: 'changed-skill', source: join(dir, 'sources', 'changed.md') },
+      ],
+      rules: [], mcps: [],
+    });
+
+    writeLog(dir, {
+      version: '1.0.0',
+      items: [
+        { type: 'skill', name: 'same-skill', target: 'claude', installedAt: 't1', installedPath: join(dir, '.claude', 'skills', 'same-skill', 'SKILL.md') },
+        { type: 'skill', name: 'changed-skill', target: 'claude', installedAt: 't1', installedPath: join(dir, '.claude', 'skills', 'changed-skill', 'SKILL.md') },
+      ],
+    });
+
+    const result = await runUpdate({ cwd: dir, type: 'skill' });
+
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout).toMatch(/update complete:.*1 updated.*1 unchanged/);
+  });
+});
+
+describe('US-006/US-011: missing agent-log.json handled gracefully', () => {
+  let dir;
+
+  beforeEach(() => { dir = makeTmp(); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+
+  it('creates agent-log.json, prints no-active-targets message, exits 0', async () => {
+    writeManifest(dir, {
+      version: '1.0.0', agentFile: {},
+      skills: [{ name: 'code-review', source: join(dir, 'skill.md') }],
+      rules: [], mcps: [],
+    });
+    // No agent-log.json written
+
+    const result = await runUpdate({ cwd: dir });
+
+    expect(result.exitCode).toBe(0);
+    expect(existsSync(join(dir, 'agent-log.json'))).toBe(true);
+    expect(result.stdout).toContain('no active targets');
+  });
+});
+
 describe('US-015: graceful handling of missing log entry on update', () => {
   let dir;
 

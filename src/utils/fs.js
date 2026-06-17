@@ -19,6 +19,6 @@ export function symlinkOrFallback(target, linkPath) {
   try {
     symlinkSync(target, linkPath);
   } catch {
-    writeFileSync(linkPath, 'read AGENT.md', 'utf8');
+    writeFileSync(linkPath, 'read AGENTS.md', 'utf8');
   }
 }

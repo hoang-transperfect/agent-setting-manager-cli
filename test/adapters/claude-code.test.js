@@ -34,10 +34,10 @@ describe('US-004: claude-code adapter', () => {
     expect(readFileSync(path, 'utf8')).toBe('# No Console Rule');
   });
 
-  it('installs agentFile: writes AGENT.md and creates CLAUDE.md (symlink or fallback)', async () => {
+  it('installs agentFile: writes AGENTS.md and creates CLAUDE.md (symlink or fallback)', async () => {
     await claudeCodeAdapter.installAgentFile({}, dir, '# My Agent');
 
-    const agentPath = join(dir, 'AGENT.md');
+    const agentPath = join(dir, 'AGENTS.md');
     const claudePath = join(dir, 'CLAUDE.md');
 
     expect(existsSync(agentPath)).toBe(true);
@@ -47,9 +47,9 @@ describe('US-004: claude-code adapter', () => {
     const stat = lstatSync(claudePath); // lstatSync does NOT follow symlinks
     if (stat.isSymbolicLink()) {
       const { readlinkSync } = await import('node:fs');
-      expect(readlinkSync(claudePath)).toBe('AGENT.md');
+      expect(readlinkSync(claudePath)).toBe('AGENTS.md');
     } else {
-      expect(readFileSync(claudePath, 'utf8')).toBe('read AGENT.md');
+      expect(readFileSync(claudePath, 'utf8')).toBe('read AGENTS.md');
     }
   });
 
