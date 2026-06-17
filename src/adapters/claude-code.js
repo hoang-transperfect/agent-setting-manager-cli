@@ -27,7 +27,6 @@ export const claudeCodeAdapter = {
   },
 
   async installMcp(item, _targetDir) {
-    if (!item.targets || !item.targets.includes('claude')) return;
     const args = ['add-mcp', item.source, '-a', 'claude', '-n', item.name, '-y'];
     if (item.transport) args.push('--transport', item.transport);
     if (item.args) args.push('--args', item.args);

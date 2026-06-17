@@ -263,7 +263,7 @@ describe('US-010: add MCP server', () => {
     vi.restoreAllMocks();
   });
 
-  it('registers MCP and calls npx add-mcp for specified targets only', async () => {
+  it('registers MCP and calls npx add-mcp for all active logged targets (no --targets flag)', async () => {
     writeLog(dir, logWithTargets(dir, ['claude', 'cursor']));
 
     const runModule = await import('../../src/utils/run.js');
@@ -272,17 +272,36 @@ describe('US-010: add MCP server', () => {
     const result = await runAdd({
       cwd: dir,
       type: 'mcp',
-      items: [{ name: 'my-server', source: 'my-pkg', targets: ['claude'] }],
+      items: [{ name: 'my-server', source: 'my-pkg' }],
     });
 
     expect(result.exitCode).toBe(0);
     const manifest = readManifest(dir);
     expect(manifest.mcps).toHaveLength(1);
     expect(manifest.mcps[0].name).toBe('my-server');
+    // No targets field stored in agent.json
+    expect(manifest.mcps[0].targets).toBeUndefined();
 
-    // npx called only for claude target
+    // npx called for BOTH active targets
     const claudeCalls = runMock.mock.calls.filter((c) => c[1].includes('-a') && c[1][c[1].indexOf('-a') + 1] === 'claude');
+    const cursorCalls = runMock.mock.calls.filter((c) => c[1].includes('-a') && c[1][c[1].indexOf('-a') + 1] === 'cursor');
     expect(claudeCalls.length).toBeGreaterThan(0);
+    expect(cursorCalls.length).toBeGreaterThan(0);
+  });
+
+  it('registers MCP in agent.json only when no active logged targets', async () => {
+    writeLog(dir, EMPTY_LOG);
+
+    const result = await runAdd({
+      cwd: dir,
+      type: 'mcp',
+      items: [{ name: 'my-server', source: 'my-pkg' }],
+    });
+
+    expect(result.exitCode).toBe(0);
+    const manifest = readManifest(dir);
+    expect(manifest.mcps[0].name).toBe('my-server');
+    expect(manifest.mcps[0].targets).toBeUndefined();
   });
 });
 

@@ -53,16 +53,16 @@ describe('US-004: claude-code adapter', () => {
     }
   });
 
-  it('does not call npx when MCP targets does not include claude', async () => {
+  it('calls npx add-mcp unconditionally (no targets filter on item)', async () => {
     const runMock = vi.spyOn(
       await import('../../src/utils/run.js'),
       'runCommand'
     ).mockReturnValue({ success: true });
 
     await claudeCodeAdapter.installMcp(
-      { name: 'figma', source: 'figma-pkg', targets: ['cursor'] },
+      { name: 'figma', source: 'figma-pkg' },
       dir
     );
-    expect(runMock).not.toHaveBeenCalled();
+    expect(runMock).toHaveBeenCalledWith('npx', expect.arrayContaining(['-a', 'claude', '-n', 'figma']));
   });
 });

@@ -46,7 +46,7 @@ describe('US-005: cursor adapter', () => {
     const runMock = vi.spyOn(runModule, 'runCommand').mockReturnValue({ success: true });
 
     await cursorAdapter.installMcp(
-      { name: 'my-mcp', source: 'https://example.com/mcp', targets: ['cursor'], transport: 'http' },
+      { name: 'my-mcp', source: 'https://example.com/mcp', transport: 'http' },
       dir
     );
 
@@ -56,11 +56,11 @@ describe('US-005: cursor adapter', () => {
     );
   });
 
-  it('does not call npx add-mcp when targets does not include cursor', async () => {
+  it('calls npx add-mcp unconditionally (no targets filter on item)', async () => {
     const runModule = await import('../../src/utils/run.js');
     const runMock = vi.spyOn(runModule, 'runCommand').mockReturnValue({ success: true });
 
-    await cursorAdapter.installMcp({ name: 'my-mcp', source: 'pkg', targets: ['claude'] }, dir);
-    expect(runMock).not.toHaveBeenCalled();
+    await cursorAdapter.installMcp({ name: 'my-mcp', source: 'pkg' }, dir);
+    expect(runMock).toHaveBeenCalledWith('npx', expect.arrayContaining(['-a', 'cursor', '-n', 'my-mcp']));
   });
 });

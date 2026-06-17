@@ -71,9 +71,7 @@ export async function runAdd({ cwd, type, items, promptFn }) {
     // Install to all active targets
     if (activeTargets.length === 0) continue;
 
-    const effectiveTargets = item.targets
-      ? activeTargets.filter((t) => item.targets.includes(t))
-      : activeTargets;
+    const effectiveTargets = activeTargets;
 
     for (const target of effectiveTargets) {
       const adapter = getAdapter(target);
@@ -133,7 +131,6 @@ function registerInManifest(manifest, type, item) {
     manifest.agentFile = { source: item.source };
   } else if (type === 'mcp') {
     const entry = { name: item.name, source: item.source };
-    if (item.targets) entry.targets = item.targets;
     if (item.transport) entry.transport = item.transport;
     if (item.args) entry.args = item.args;
     if (item.env) entry.env = item.env;
