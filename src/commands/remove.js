@@ -16,14 +16,13 @@ function conventionPath(type, name, target, cwd) {
   return null;
 }
 
-export async function runRemove({ cwd, type, names }) {
+export async function runRemove({ cwd, type, names, print = () => {} }) {
   const manifestPath = join(cwd, 'agent.json');
   const logPath = join(cwd, 'agent-log.json');
 
   const manifest = readManifest(manifestPath);
   const collector = new ExitCollector();
 
-  // Handle missing agent-log.json
   if (!existsSync(logPath)) {
     const log = { version: '1.0.0', items: [] };
     for (const name of names) {
@@ -38,7 +37,9 @@ export async function runRemove({ cwd, type, names }) {
     if (collector.hasFailures()) {
       return { exitCode: 1, stderr: collector.getFailures().join('\n') };
     }
-    return { exitCode: 0, stdout: 'no active targets — run asm install --target <target> to set up platforms' };
+    const msg = 'no active targets — run asm install --target <target> to set up platforms';
+    print(msg);
+    return { exitCode: 0, stdout: msg };
   }
 
   const log = readLog(logPath);
@@ -50,13 +51,15 @@ export async function runRemove({ cwd, type, names }) {
       continue;
     }
 
-    // Attempt removal at convention path for each active target
     for (const target of activeTargets) {
+      print(`  → removing ${name} from ${target}…`);
       const path = conventionPath(type, name, target, cwd);
       if (path && existsSync(path)) {
         unlinkSync(path);
+        print(`  ✓ removed: ${name} from ${target}`);
+      } else if (path) {
+        print(`  ⚠ warning: file not found at ${path} — skipping platform removal`);
       }
-      // Also remove CLAUDE.md symlink when removing agentFile from claude target
       if (type === 'agentFile' && target === 'claude') {
         const claudeMd = join(cwd, 'CLAUDE.md');
         if (existsSync(claudeMd)) unlinkSync(claudeMd);

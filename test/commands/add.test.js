@@ -214,20 +214,18 @@ describe('US-009: add agentFile', () => {
 
   it('registers and installs agentFile to both active targets', async () => {
     writeLog(dir, logWithTargets(dir, ['claude', 'cursor']));
-    writeFileSync(join(dir, 'AGENT.md'), '# Agent Instructions');
+    writeFileSync(join(dir, 'source-agent.md'), '# Agent Instructions');
 
     const result = await runAdd({
       cwd: dir,
       type: 'agentFile',
-      items: [{ source: join(dir, 'AGENT.md') }],
+      items: [{ source: join(dir, 'source-agent.md') }],
     });
 
     expect(result.exitCode).toBe(0);
-    // Claude: AGENT.md + CLAUDE.md
-    expect(existsSync(join(dir, 'AGENT.md'))).toBe(true);
-    expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true);
-    // Cursor: AGENTS.md
+    // Claude: AGENTS.md (content) + CLAUDE.md (symlink or stub)
     expect(existsSync(join(dir, 'AGENTS.md'))).toBe(true);
+    expect(existsSync(join(dir, 'CLAUDE.md'))).toBe(true);
 
     const manifest = readManifest(dir);
     expect(manifest.agentFile.source).toBeTruthy();
@@ -359,5 +357,57 @@ describe('US-016: partial failure in multi-artifact add', () => {
     });
 
     expect(result.exitCode).toBe(0);
+  });
+});
+
+describe('NFR-05: asm add real-time output', () => {
+  let dir;
+
+  beforeEach(() => {
+    dir = makeTmp();
+    writeManifest(dir, BASE_MANIFEST);
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+    vi.restoreAllMocks();
+  });
+
+  it('prints in-progress line before result line for each target', async () => {
+    writeLog(dir, logWithTargets(dir, ['claude', 'cursor']));
+    writeFileSync(join(dir, 'skill.md'), '# Skill');
+
+    const lines = [];
+    await runAdd({
+      cwd: dir,
+      type: 'skill',
+      items: [{ name: 'my-skill', source: join(dir, 'skill.md') }],
+      print: (l) => lines.push(l),
+    });
+
+    const progressClaude = lines.findIndex((l) => l.includes('→') && l.includes('claude'));
+    const resultClaude = lines.findIndex((l) => l.includes('✓') && l.includes('claude'));
+    const progressCursor = lines.findIndex((l) => l.includes('→') && l.includes('cursor'));
+    const resultCursor = lines.findIndex((l) => l.includes('✓') && l.includes('cursor'));
+
+    expect(progressClaude).toBeGreaterThanOrEqual(0);
+    expect(resultClaude).toBeGreaterThan(progressClaude);
+    expect(progressCursor).toBeGreaterThanOrEqual(0);
+    expect(resultCursor).toBeGreaterThan(progressCursor);
+  });
+
+  it('prints no-active-targets message when log is empty', async () => {
+    writeLog(dir, EMPTY_LOG);
+    writeFileSync(join(dir, 'skill.md'), '# Skill');
+
+    const lines = [];
+    await runAdd({
+      cwd: dir,
+      type: 'skill',
+      items: [{ name: 'my-skill', source: join(dir, 'skill.md') }],
+      print: (l) => lines.push(l),
+    });
+
+    expect(lines.some((l) => l.includes('no active targets'))).toBe(true);
   });
 });

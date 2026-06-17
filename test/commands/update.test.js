@@ -283,3 +283,56 @@ describe('US-006/US-011: missing agent-log.json handled gracefully', () => {
 // US-015 superseded 2026-06-17: per-artifact log lookup removed.
 // Active targets are now resolved from distinct target values across ALL log items.
 // No per-artifact "not found in agent-log" lookup or warning exists anymore.
+
+describe('NFR-05: asm update real-time output', () => {
+  let dir;
+
+  beforeEach(() => { dir = makeTmp(); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+
+  it('prints → checking line before result line for each artifact', async () => {
+    mkdirSync(join(dir, 'sources'), { recursive: true });
+    writeFileSync(join(dir, 'sources', 'skill.md'), '# New content');
+    mkdirSync(join(dir, '.claude', 'skills', 'my-skill'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'skills', 'my-skill', 'SKILL.md'), '# Old content');
+
+    writeManifest(dir, {
+      version: '1.0.0', agentFile: {},
+      skills: [{ name: 'my-skill', source: join(dir, 'sources', 'skill.md') }],
+      rules: [], mcps: [],
+    });
+
+    writeLog(dir, {
+      version: '1.0.0',
+      items: [{ type: 'skill', name: 'my-skill', target: 'claude', installedAt: 't1', installedPath: join(dir, '.claude', 'skills', 'my-skill', 'SKILL.md') }],
+    });
+
+    const lines = [];
+    await runUpdate({ cwd: dir, type: 'skill', names: ['my-skill'], print: (l) => lines.push(l) });
+
+    const progressIdx = lines.findIndex((l) => l.includes('→') && l.includes('my-skill'));
+    const resultIdx = lines.findIndex((l) => (l.includes('✓') || l.includes('—')) && l.includes('my-skill'));
+
+    expect(progressIdx).toBeGreaterThanOrEqual(0);
+    expect(resultIdx).toBeGreaterThan(progressIdx);
+  });
+
+  it('prints ✗ line and summary when source is unreachable', async () => {
+    writeManifest(dir, {
+      version: '1.0.0', agentFile: {},
+      skills: [{ name: 'bad-skill', source: join(dir, 'no-such-file.md') }],
+      rules: [], mcps: [],
+    });
+
+    writeLog(dir, {
+      version: '1.0.0',
+      items: [{ type: 'skill', name: 'bad-skill', target: 'claude', installedAt: 't1' }],
+    });
+
+    const lines = [];
+    await runUpdate({ cwd: dir, type: 'skill', names: ['bad-skill'], print: (l) => lines.push(l) });
+
+    expect(lines.some((l) => l.includes('✗') && l.includes('bad-skill'))).toBe(true);
+    expect(lines.some((l) => l.includes('update complete') && l.includes('1 skipped'))).toBe(true);
+  });
+});

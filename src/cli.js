@@ -48,7 +48,7 @@ program
   .requiredOption('--target <targets...>', 'target platforms (claude, cursor)')
   .action(async (opts) => {
     versionGuard();
-    const result = await runInstall({ cwd: cwd(), targets: opts.target, cliVersion: CLI_VERSION });
+    const result = await runInstall({ cwd: cwd(), targets: opts.target, cliVersion: CLI_VERSION, print: (l) => process.stdout.write(l + '\n') });
     if (result.stderr) process.stderr.write(result.stderr + '\n');
     process.exit(result.exitCode);
   });
@@ -64,7 +64,6 @@ program
   .option('--name <names...>', 'artifact name(s)')
   .option('--source <sources...>', 'source path(s) or URL(s)')
   .option('--package <pkg>', 'npm package name (skills only)')
-  .option('--targets <targets...>', 'targets for MCP (claude, cursor)')
   .option('--transport <transport>', 'MCP transport (http, stdio)')
   .action(async (opts) => {
     versionGuard();
@@ -79,14 +78,14 @@ program
     if (type === 'agentFile') {
       items = [{ source: opts.source?.[0] }];
     } else if (type === 'mcp') {
-      items = [{ name: opts.name?.[0], source: opts.source?.[0], targets: opts.targets, transport: opts.transport }];
+      items = [{ name: opts.name?.[0], source: opts.source?.[0], transport: opts.transport }];
     } else {
       const names = opts.name || [];
       const sources = opts.source || [];
       items = names.map((name, i) => ({ name, source: sources[i] }));
     }
 
-    const result = await runAdd({ cwd: cwd(), type, items });
+    const result = await runAdd({ cwd: cwd(), type, items, print: (l) => process.stdout.write(l + '\n') });
     if (result.stderr) process.stderr.write(result.stderr + '\n');
     process.exit(result.exitCode);
   });
@@ -101,7 +100,7 @@ program
   .action(async (opts) => {
     versionGuard();
     const type = opts.skill ? 'skill' : opts.rule ? 'rule' : null;
-    const result = await runUpdate({ cwd: cwd(), type, names: opts.name });
+    const result = await runUpdate({ cwd: cwd(), type, names: opts.name, print: (l) => process.stdout.write(l + '\n') });
     if (result.stderr) process.stderr.write(result.stderr + '\n');
     process.exit(result.exitCode);
   });
@@ -123,7 +122,7 @@ program
       process.exit(1);
     }
     const names = opts.agentFile ? ['agentFile'] : (opts.name || []);
-    const result = await runRemove({ cwd: cwd(), type, names });
+    const result = await runRemove({ cwd: cwd(), type, names, print: (l) => process.stdout.write(l + '\n') });
     if (result.stderr) process.stderr.write(result.stderr + '\n');
     process.exit(result.exitCode);
   });

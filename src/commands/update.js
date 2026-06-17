@@ -17,19 +17,17 @@ function conventionPath(type, name, target, cwd) {
   return null;
 }
 
-export async function runUpdate({ cwd, type, names }) {
+export async function runUpdate({ cwd, type, names, print = () => {} }) {
   const manifestPath = join(cwd, 'agent.json');
   const logPath = join(cwd, 'agent-log.json');
 
   const manifest = readManifest(manifestPath);
 
-  // Handle missing agent-log.json
   if (!existsSync(logPath)) {
     writeLog(logPath, { version: '1.0.0', items: [] });
-    return {
-      exitCode: 0,
-      stdout: 'no active targets — run asm install --target <target> to set up platforms',
-    };
+    const msg = 'no active targets — run asm install --target <target> to set up platforms';
+    print(msg);
+    return { exitCode: 0, stdout: msg };
   }
 
   const log = readLog(logPath);
@@ -37,7 +35,6 @@ export async function runUpdate({ cwd, type, names }) {
 
   const collector = new ExitCollector();
 
-  // Validate named artifacts against manifest before checking targets
   if (names && names.length > 0) {
     const typesToCheck = type ? [type] : ['skill', 'rule', 'agentFile'];
     for (const artifactType of typesToCheck) {
@@ -53,11 +50,11 @@ export async function runUpdate({ cwd, type, names }) {
   }
 
   if (activeTargets.length === 0) {
-    return {
-      exitCode: 0,
-      stdout: 'no active targets — run asm install --target <target> to set up platforms',
-    };
+    const msg = 'no active targets — run asm install --target <target> to set up platforms';
+    print(msg);
+    return { exitCode: 0, stdout: msg };
   }
+
   const typesToUpdate = type ? [type] : ['skill', 'rule', 'agentFile'];
 
   let updated = 0;
@@ -75,10 +72,15 @@ export async function runUpdate({ cwd, type, names }) {
     for (const entry of selectedEntries) {
       const entryName = entry.name ?? 'agentFile';
 
+      print(`  → checking ${entryName}…`);
+
       let content;
       try {
         content = await fetchSource(entry.source);
       } catch {
+        const line = `  ✗ skipped: source not found for ${entryName}`;
+        print(line);
+        stdout.push(line);
         collector.addFailure(`skipped: source not found for ${entryName}`);
         skipped++;
         continue;
@@ -95,7 +97,9 @@ export async function runUpdate({ cwd, type, names }) {
             : null;
 
           if (currentContent === content) {
-            stdout.push(`no change: ${entryName} (${target}) — already up to date`);
+            const line = `  — no change: ${entryName} (${target}) — already up to date`;
+            print(line);
+            stdout.push(line);
             unchanged++;
           } else {
             await installByType(adapter, artifactType, entry, cwd, content);
@@ -106,10 +110,15 @@ export async function runUpdate({ cwd, type, names }) {
               installedAt: new Date().toISOString(),
               ...(installedPath ? { installedPath } : {}),
             });
-            stdout.push(`updated: ${entryName} (${target})`);
+            const line = `  ✓ updated: ${entryName} (${target})`;
+            print(line);
+            stdout.push(line);
             updated++;
           }
         } catch (err) {
+          const line = `  ✗ failed: ${entryName} on ${target}: ${err.message}`;
+          print(line);
+          stdout.push(line);
           collector.addFailure(`failed to update ${entryName} on ${target}: ${err.message}`);
           skipped++;
         }
@@ -117,7 +126,10 @@ export async function runUpdate({ cwd, type, names }) {
     }
   }
 
-  stdout.push(`update complete: ${updated} updated, ${unchanged} unchanged, ${skipped} skipped`);
+  const summaryLine = `update complete: ${updated} updated, ${unchanged} unchanged, ${skipped} skipped`;
+  print('');
+  print(summaryLine);
+  stdout.push(summaryLine);
 
   if (collector.hasFailures()) {
     return { exitCode: 1, stdout: stdout.join('\n'), stderr: collector.getFailures().join('\n') };

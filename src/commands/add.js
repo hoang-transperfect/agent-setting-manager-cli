@@ -14,14 +14,7 @@ function getActiveTargets(log) {
   return [...seen].filter((t) => SUPPORTED_TARGETS.includes(t));
 }
 
-async function handleDuplicate(name) {
-  if (!process.stdin.isTTY) {
-    return 'stop';
-  }
-  return promptModule.askOverwrite(name);
-}
-
-export async function runAdd({ cwd, type, items, promptFn }) {
+export async function runAdd({ cwd, type, items, promptFn, print = () => {} }) {
   const manifestPath = join(cwd, 'agent.json');
   const logPath = join(cwd, 'agent-log.json');
 
@@ -32,7 +25,6 @@ export async function runAdd({ cwd, type, items, promptFn }) {
   const collector = new ExitCollector();
 
   for (const item of items) {
-    // Validate: source required for non-MCP types that aren't package-based
     if (type !== 'mcp' && type !== 'agentFile' && !item.source && !item.package) {
       collector.addFailure(`source is required for ${type} "${item.name}"`);
       continue;
@@ -42,18 +34,15 @@ export async function runAdd({ cwd, type, items, promptFn }) {
       continue;
     }
 
-    // Check for duplicates
     const isDuplicate = checkDuplicate(manifest, type, item);
     if (isDuplicate) {
       const askFn = promptFn ?? (process.stdin.isTTY ? promptModule.askOverwrite : null);
-      if (!askFn) continue; // non-TTY, no injected fn: treat as stop
+      if (!askFn) continue;
       const choice = await askFn(item.name || 'agentFile');
       if (choice === 'stop') continue;
-      // overwrite: remove existing entry
       removeDuplicate(manifest, type, item);
     }
 
-    // Fetch source (validates reachability before touching manifest)
     let content;
     if (type !== 'mcp' && item.source) {
       try {
@@ -64,16 +53,17 @@ export async function runAdd({ cwd, type, items, promptFn }) {
       }
     }
 
-    // Register in manifest
     registerInManifest(manifest, type, item);
     writeManifest(manifestPath, manifest);
 
-    // Install to all active targets
-    if (activeTargets.length === 0) continue;
+    if (activeTargets.length === 0) {
+      print(`no active targets — run asm install --target <target> to set up platforms`);
+      continue;
+    }
 
-    const effectiveTargets = activeTargets;
-
-    for (const target of effectiveTargets) {
+    for (const target of activeTargets) {
+      const displayName = item.name || 'agentFile';
+      print(`  → adding ${displayName} to ${target}…`);
       const adapter = getAdapter(target);
       try {
         let installedPath;
@@ -88,13 +78,15 @@ export async function runAdd({ cwd, type, items, promptFn }) {
         }
         addLogEntry(logPath, {
           type,
-          name: item.name || 'agentFile',
+          name: displayName,
           target,
           installedAt: new Date().toISOString(),
           ...(installedPath ? { installedPath } : {}),
         });
+        print(`  ✓ added: ${displayName} → ${target}`);
       } catch (err) {
-        collector.addFailure(`failed to install ${type} "${item.name}" to ${target}: ${err.message}`);
+        print(`  ✗ failed: ${displayName} on ${target}`);
+        collector.addFailure(`failed to install ${type} "${displayName}" to ${target}: ${err.message}`);
       }
     }
   }

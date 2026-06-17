@@ -177,3 +177,53 @@ describe('US-012: missing agent-log.json on remove', () => {
     expect(result.stdout).toContain('no active targets');
   });
 });
+
+describe('NFR-05: asm remove real-time output', () => {
+  let dir;
+
+  beforeEach(() => { dir = makeTmp(); });
+  afterEach(() => { rmSync(dir, { recursive: true, force: true }); });
+
+  it('prints → removing line before ✓ removed line for each target', async () => {
+    mkdirSync(join(dir, '.claude', 'skills', 'my-skill'), { recursive: true });
+    writeFileSync(join(dir, '.claude', 'skills', 'my-skill', 'SKILL.md'), '# Skill');
+
+    writeManifest(dir, {
+      version: '1.0.0', agentFile: {},
+      skills: [{ name: 'my-skill', source: 'skill.md' }],
+      rules: [], mcps: [],
+    });
+
+    writeLog(dir, {
+      version: '1.0.0',
+      items: [{ type: 'skill', name: 'my-skill', target: 'claude', installedAt: 't1' }],
+    });
+
+    const lines = [];
+    await runRemove({ cwd: dir, type: 'skill', names: ['my-skill'], print: (l) => lines.push(l) });
+
+    const progressIdx = lines.findIndex((l) => l.includes('→') && l.includes('my-skill'));
+    const resultIdx = lines.findIndex((l) => l.includes('✓') && l.includes('my-skill'));
+
+    expect(progressIdx).toBeGreaterThanOrEqual(0);
+    expect(resultIdx).toBeGreaterThan(progressIdx);
+  });
+
+  it('prints ⚠ warning when platform file not found', async () => {
+    writeManifest(dir, {
+      version: '1.0.0', agentFile: {},
+      skills: [{ name: 'ghost-skill', source: 'skill.md' }],
+      rules: [], mcps: [],
+    });
+
+    writeLog(dir, {
+      version: '1.0.0',
+      items: [{ type: 'skill', name: 'ghost-skill', target: 'claude', installedAt: 't1' }],
+    });
+
+    const lines = [];
+    await runRemove({ cwd: dir, type: 'skill', names: ['ghost-skill'], print: (l) => lines.push(l) });
+
+    expect(lines.some((l) => l.includes('⚠') && l.includes('ghost-skill'))).toBe(true);
+  });
+});
